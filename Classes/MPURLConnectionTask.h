@@ -11,11 +11,14 @@
 #import "MPTask.h"
 
 @interface MPURLConnectionTask : NSObject <MPTask> {
+@private
 	NSURLConnection *connection;
+
 	NSMutableData *data;
-    NSError *error;
 	int statusCode;
     
+    NSError *error;
+
 	void (^completionBlock) (NSObject <MPTask>*, id);
 	void (^failureBlock) (NSObject <MPTask>*, NSError*);
 	void (^progressBlock) (MPURLConnectionTask*, float);

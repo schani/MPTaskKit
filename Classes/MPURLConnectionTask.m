@@ -54,7 +54,7 @@
 
 	[progressBlock release];
 	progressBlock = nil;
-
+    
     [[UIApplication sharedApplication] removeNetworkActivity];
     
     [[MPBackgroundTaskHandler sharedBackgroundTaskHandler] endBackgroundTaskForObject: self];
@@ -69,16 +69,8 @@
 
 - (NSData*) data
 {
-    NSData *theData;
-
-    if (connection != nil)
-        theData = [[data copy] autorelease];
-    else
-        theData = data;
-    
-    if ([theData length] == 0)
-        return nil;
-    return theData;
+    NSAssert (connection == nil, @"Cannot get data while still connected");
+    return data;
 }
 
 - (void) setProgressBlock: (void (^) (MPURLConnectionTask*, float)) _progressBlock
@@ -108,11 +100,7 @@
 
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
-    if (connection == nil) {
-        if (_error != nil)
-            *_error = error;
-        return data;
-    }
+    NSAssert (connection != nil, @"Cannot run both synchronously and asynchronously");
 
     NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
 
@@ -122,6 +110,8 @@
     } while (connection != nil);
 
     if (connection) {
+        [self endConnection];
+
         // FIXME: pass suitable NSError
         if (_error != nil)
             *_error = nil;
@@ -129,7 +119,10 @@
     }
 
     if (_error != nil)
-        *_error = error;
+        *_error = [[error retain] autorelease];
+
+    [self endConnection];
+
     return data;
 }
 
@@ -156,27 +149,31 @@
 		statusCode = [(id)response statusCode];
 }
 
-- (void) connectionDidFinishLoading: (NSURLConnection*) connection
+- (void) connectionDidFinishLoading: (NSURLConnection*) theConnection
 {
-	if (statusCode < 200 || statusCode >= 300) {
+    theConnection = nil;
+
+    if (data != nil) {
+        if (completionBlock != nil) {
+            [[self retain] autorelease];
+            completionBlock (self, data);
+        }
+    } else {
         if (failureBlock != nil) {
             [[self retain] autorelease];
             // FIXME: pass a suitable NSError
             failureBlock (self, nil);
-        }
-	} else {
-        if (completionBlock != nil) {
-            [[self retain] autorelease];
-            completionBlock (self, data);
         }
     }
 
 	[self endConnection];
 }
 
-- (void) connection: (NSURLConnection*) connection didFailWithError: (NSError*) _error
+- (void) connection: (NSURLConnection*) theConnection didFailWithError: (NSError*) _error
 {
     error = [_error retain];
+
+    connection = nil;
 
     if (failureBlock != nil) {
         [[self retain] autorelease];
