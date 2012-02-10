@@ -18,3 +18,10 @@
 - (void) cancel;
 
 @end
+
+extern NSString *MPTaskErrorDomain;
+extern NSString *MPTaskExceptionErrorKey;
+
+#define MPTaskExceptionErrorCode                1
+#define MPTaskCouldNotStartRunLoopErrorCode     2
+#define MPTaskHTTPErrorErrorCode                3

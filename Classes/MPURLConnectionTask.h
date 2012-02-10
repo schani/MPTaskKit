@@ -13,6 +13,7 @@
 @interface MPURLConnectionTask : NSObject <MPTask> {
 @private
 	NSURLConnection *connection;
+    BOOL failOnHTTPError;
 
 	NSMutableData *data;
 	int statusCode;
@@ -24,11 +25,12 @@
 	void (^progressBlock) (MPURLConnectionTask*, float);
 }
 
-+ (MPURLConnectionTask*) URLConnectionTaskWithRequest: (NSURLRequest*) request;
++ (MPURLConnectionTask*) URLConnectionTaskWithRequest: (NSURLRequest*) request
+                                      failOnHTTPError: (BOOL) failOnHTTPError;
 
 - (void) setProgressBlock: (void (^) (MPURLConnectionTask*, float)) progressBlock;
 
-- (NSData*) data;
-- (int) statusCode;
-
 @end
+
+extern NSString *MPURLConnectionTaskResultDataKey;
+extern NSString *MPURLConnectionTaskResultStatusCodeKey;

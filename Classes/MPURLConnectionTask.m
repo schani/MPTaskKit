@@ -11,16 +11,22 @@
 
 #import "MPURLConnectionTask.h"
 
+NSString *MPURLConnectionTaskResultDataKey = @"MPURLConnectionTaskResultDataKey";
+NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultStatusCodeKey";
+
 @implementation MPURLConnectionTask
 
 #pragma mark - Init and dealloc
 
 - (id) initWithRequest: (NSURLRequest*) request
+       failOnHTTPError: (BOOL) _failOnHTTPError
 {
 	if ((self = [super init])) {
 		connection = [[NSURLConnection alloc] initWithRequest: request
                                                      delegate: self
                                              startImmediately: NO];
+        failOnHTTPError = _failOnHTTPError;
+        statusCode = -1;
 	}
 	return self;
 }
@@ -38,8 +44,9 @@
 }
 
 + (MPURLConnectionTask*) URLConnectionTaskWithRequest: (NSURLRequest*) request
+                                      failOnHTTPError: (BOOL) failOnHTTPError
 {
-    return [[[MPURLConnectionTask alloc] initWithRequest: request] autorelease];
+    return [[[MPURLConnectionTask alloc] initWithRequest: request failOnHTTPError: failOnHTTPError] autorelease];
 }
 
 - (void) endConnection
@@ -62,22 +69,29 @@
 
 #pragma mark - Getters, setters
 
-- (int) statusCode
-{
-	return statusCode;
-}
-
-- (NSData*) data
-{
-    NSAssert (connection == nil, @"Cannot get data while still connected");
-    return data;
-}
-
 - (void) setProgressBlock: (void (^) (MPURLConnectionTask*, float)) _progressBlock
 {
     _progressBlock = [_progressBlock copy];
     [progressBlock release];
     progressBlock = _progressBlock;
+}
+
+#pragma mark - Result dictionary
+
+- (NSDictionary*) resultDictionary
+{
+    NSAssert (data != nil, @"There must be data for a result");
+    NSDictionary *result = [NSDictionary dictionaryWithObjectsAndKeys:
+                            data, MPURLConnectionTaskResultDataKey,
+                            [NSNumber numberWithInt: statusCode], MPURLConnectionTaskResultStatusCodeKey,
+                            nil];
+
+    [data release];
+    data = nil;
+
+    statusCode = -1;
+
+    return result;
 }
 
 #pragma mark - MPTask
@@ -86,6 +100,7 @@
                                  failureBlock: (void (^) (NSObject <MPTask>*, NSError*)) _failureBlock
 {
     NSAssert (data == nil, @"Can only start a connection asynchronously once");
+    NSAssert (error == nil, @"Cannot have error before starting connection");
 
     data = [[NSMutableData dataWithCapacity: 8192] retain];
     completionBlock = [_completionBlock copy];
@@ -110,30 +125,42 @@
     } while (connection != nil);
 
     if (connection) {
+        // something went wrong with the run loop
         [self endConnection];
 
-        // FIXME: pass suitable NSError
-        if (_error != nil)
-            *_error = nil;
-        return nil;
+        NSError *runLoopError = [NSError errorWithDomain: MPTaskErrorDomain
+                                                    code: MPTaskCouldNotStartRunLoopErrorCode
+                                                userInfo: nil];
+        if (_error != NULL)
+            *_error = runLoopError;
+		return nil;
     }
 
     if (_error != nil)
         *_error = [[error retain] autorelease];
 
+    NSDictionary *result = error == nil ? nil : [self resultDictionary];
+
+    [error release];
+    error = nil;
+
     [self endConnection];
 
-    return data;
+    return result;
 }
 
 - (void) cancel
 {
     NSAssert (data != nil, @"Must have started to be able to cancel");
     NSAssert (connection != nil, @"Can only cancel a running connection");
+    NSAssert (error == nil, @"If there is an error the connection is already ended");
 
 	[connection cancel];
 
 	[self endConnection];
+
+    [data release];
+    data = nil;
 }
 
 #pragma mark - NSURLConnection delegate
@@ -151,19 +178,21 @@
 
 - (void) connectionDidFinishLoading: (NSURLConnection*) theConnection
 {
-    theConnection = nil;
+    NSAssert (error == nil, @"We finished but there is an error?  Should not happen.");
 
-    if (data != nil) {
-        if (completionBlock != nil) {
-            [[self retain] autorelease];
-            completionBlock (self, data);
-        }
-    } else {
+    if (failOnHTTPError && (statusCode < 200 || statusCode >= 300)) {
+        error = [[NSError errorWithDomain: MPTaskErrorDomain
+                                     code: MPTaskHTTPErrorErrorCode
+                                 userInfo: [self resultDictionary]] retain];
         if (failureBlock != nil) {
             [[self retain] autorelease];
-            // FIXME: pass a suitable NSError
-            failureBlock (self, nil);
+            failureBlock (self, error);
         }
+    }
+
+    if (error == nil && completionBlock != nil) {
+        [[self retain] autorelease];
+        completionBlock (self, [self resultDictionary]);
     }
 
 	[self endConnection];
@@ -172,8 +201,6 @@
 - (void) connection: (NSURLConnection*) theConnection didFailWithError: (NSError*) _error
 {
     error = [_error retain];
-
-    connection = nil;
 
     if (failureBlock != nil) {
         [[self retain] autorelease];
