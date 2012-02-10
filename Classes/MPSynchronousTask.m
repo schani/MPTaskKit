@@ -103,13 +103,16 @@ SetCurrentTask (MPSynchronousTask *task)
     parent = nil;
 }
 
-- (BOOL) isInCurrentChain
++ (BOOL) isTaskInCurrentChain: (NSObject <MPTask>*) task
 {
-    MPSynchronousTask *task = GetCurrentTask ();
-    while (task != nil) {
-        if (task == self)
+    if (![task isKindOfClass: [MPSynchronousTask class]])
+        return NO;
+
+    MPSynchronousTask *chainTask = GetCurrentTask ();
+    while (chainTask != nil) {
+        if (chainTask == task)
             return YES;
-        task = [task parentTask];
+        chainTask = [chainTask parentTask];
     }
     return NO;
 }
@@ -147,7 +150,7 @@ SetCurrentTask (MPSynchronousTask *task)
     NSAssert (error, @"Cannot fail without error");
     NSAssert ([self currentTask] != nil, @"Can only propagate an error if we're within a task");
     if ([task isKindOfClass: [MPSynchronousTask class]])
-        NSAssert ([(MPSynchronousTask*)task isInCurrentChain], @"A task can only fail from inside");
+        NSAssert ([MPSynchronousTask isTaskInCurrentChain: task], @"A task can only fail from inside");
 
     @throw [MPTaskException taskExceptionForTask: task error: error];
 }
@@ -235,7 +238,7 @@ SetCurrentTask (MPSynchronousTask *task)
 
         if (exceptionError != nil) {
             // an error occurred
-            if ((parent == nil || exceptionTask == self) && error != NULL) {
+            if ((exceptionTask == self || ![MPSynchronousTask isTaskInCurrentChain: exceptionTask]) && error != NULL) {
                 // report it here
                 *error = [exception error];
                 return nil;
