@@ -19,9 +19,16 @@
                         reason: nil
                       userInfo: error == nil ? nil : [NSDictionary dictionaryWithObject: error forKey: @"error"]];
     if (self != nil) {
-        task = _task;
+        task = [_task retain];
     }
     return self;
+}
+
+- (void) dealloc
+{
+    [task release];
+
+    [super dealloc];
 }
 
 + (MPTaskException*) taskExceptionForTask: (NSObject <MPTask>*) task
