@@ -7,6 +7,7 @@
 //
 
 #import "MPBackgroundTaskHandler.h"
+#import "MPSynchronousTask.h"
 #import "UIApplication+LentiCam.h"
 
 #import "MPURLConnectionTask.h"
@@ -47,6 +48,23 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
                                       failOnHTTPError: (BOOL) failOnHTTPError
 {
     return [[[MPURLConnectionTask alloc] initWithRequest: request failOnHTTPError: failOnHTTPError] autorelease];
+}
+
+#pragma mark - Connection
+
+- (void) startConnection
+{
+    NSAssert (connection != nil, @"Must have a connection to start");
+    NSAssert (data == nil, @"Can only start a connection asynchronously once");
+    NSAssert (error == nil, @"Cannot have error before starting connection");
+
+    data = [[NSMutableData dataWithCapacity: 8192] retain];
+
+    [[UIApplication sharedApplication] addNetworkActivity];
+
+    [[MPBackgroundTaskHandler sharedBackgroundTaskHandler] startBackgroundTaskForObject: self];
+
+    [connection start];
 }
 
 - (void) endConnection
@@ -99,29 +117,28 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
 - (void) runAsynchronouslyWithCompletionBlock: (void (^) (NSObject <MPTask>*, id)) _completionBlock
                                  failureBlock: (void (^) (NSObject <MPTask>*, NSError*)) _failureBlock
 {
-    NSAssert (data == nil, @"Can only start a connection asynchronously once");
-    NSAssert (error == nil, @"Cannot have error before starting connection");
-
-    data = [[NSMutableData dataWithCapacity: 8192] retain];
     completionBlock = [_completionBlock copy];
     failureBlock = [_failureBlock copy];
 
-    [[UIApplication sharedApplication] addNetworkActivity];
-
-    [[MPBackgroundTaskHandler sharedBackgroundTaskHandler] startBackgroundTaskForObject: self];
-
-    [connection start];
+    [self startConnection];
 }
 
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
-    NSAssert (connection != nil, @"Cannot run both synchronously and asynchronously");
-
+    BOOL inSynchronousTask = [MPSynchronousTask currentTask] != nil;
     NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
+
+    [self startConnection];
 
     do {
         if (![runLoop runMode: NSDefaultRunLoopMode beforeDate: [NSDate distantFuture]])
             break;
+
+        if (inSynchronousTask && [MPSynchronousTask cancelRequested]) {
+            [self cancel];
+            [MPSynchronousTask doCancelIfRequested];
+            NSAssert (NO, @"This must never run");
+        }
     } while (connection != nil);
 
     if (connection) {
@@ -131,20 +148,30 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
         NSError *runLoopError = [NSError errorWithDomain: MPTaskErrorDomain
                                                     code: MPTaskCouldNotStartRunLoopErrorCode
                                                 userInfo: nil];
-        if (_error != NULL)
+        if (_error != NULL) {
             *_error = runLoopError;
-		return nil;
+            return nil;
+        }
+        if (!inSynchronousTask)
+            return nil;
+        [MPSynchronousTask propagateError: runLoopError fromTask: self];
+        NSAssert (NO, @"This must never run");
     }
 
-    if (_error != nil)
+    if (_error != NULL) {
         *_error = [[error retain] autorelease];
+    } else if (error != nil && inSynchronousTask) {
+        NSError *theError = [error autorelease];
+        error = nil;
 
-    NSDictionary *result = error == nil ? nil : [self resultDictionary];
+        [MPSynchronousTask propagateError: theError fromTask: self];
+        NSAssert (NO, @"This must never run");
+    }
+
+    NSDictionary *result = error != nil ? nil : [self resultDictionary];
 
     [error release];
     error = nil;
-
-    [self endConnection];
 
     return result;
 }
@@ -195,7 +222,7 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
         completionBlock (self, [self resultDictionary]);
     }
 
-	[self endConnection];
+    [self endConnection];
 }
 
 - (void) connection: (NSURLConnection*) theConnection didFailWithError: (NSError*) _error
@@ -207,7 +234,7 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
         failureBlock (self, error);
     }
 
-	[self endConnection];
+    [self endConnection];
 }
 
 - (void) connection: (NSURLConnection*) connection
