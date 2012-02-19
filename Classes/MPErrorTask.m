@@ -67,8 +67,10 @@
 - (void) runAsynchronouslyWithCompletionBlock: (void (^)(NSObject<MPTask> *, id)) completionBlock
                                  failureBlock: (void (^)(NSObject<MPTask> *, NSError *)) failureBlock
 {
-    NSError *e = [self retainedError];
+    if (failureBlock == nil)
+        return;
 
+    NSError *e = [self retainedError];
     if (e == nil)
         return;
 
