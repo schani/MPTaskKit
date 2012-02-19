@@ -29,7 +29,7 @@
 + (MPSynchronousTask*) currentTask;
 - (MPSynchronousTask*) parentTask;
 
-- (void) failWithError: (NSError*) error;
+- (void) failWithError: (NSError*) error __attribute__ ((analyzer_noreturn));
 + (void) propagateError: (NSError*) error
                fromTask: (NSObject <MPTask>*) task;
 
