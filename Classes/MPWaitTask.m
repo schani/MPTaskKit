@@ -125,9 +125,11 @@
 
     // FIXME: run the blocks without the lock or add a try/finally
     if (result != nil) {
-        _completionBlock (self, result);
+        if (_completionBlock != nil)
+            _completionBlock (self, result);
     } else if (error != nil) {
-        _failureBlock (self, error);
+        if (_failureBlock != nil)
+            _failureBlock (self, error);
     } else {
         completionBlock = [_completionBlock copy];
         failureBlock = [_failureBlock copy];
