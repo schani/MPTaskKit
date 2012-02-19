@@ -8,6 +8,10 @@
 
 #import "MPValueTask.h"
 
+@interface MPValueTask ()
+- (id) retainedResult NS_RETURNS_RETAINED;
+@end
+
 @implementation MPValueTask
 
 - (id) initWithResult: (id) _result
@@ -31,21 +35,46 @@
     return [[[MPValueTask alloc] initWithResult: result] autorelease];
 }
 
+- (id) retainedResult
+{
+    id r;
+
+    @synchronized (self) {
+        r = (id)result;
+        [r retain];
+    }
+
+    return r;
+}
+
 - (void) runAsynchronouslyWithCompletionBlock: (void (^)(NSObject<MPTask> *, id)) completionBlock
                                  failureBlock: (void (^)(NSObject<MPTask> *, NSError *)) failureBlock
 {
-    completionBlock (self, result);
+    if (completionBlock == nil)
+        return;
+
+    id r = [self retainedResult];
+    if (r == nil)
+        return;
+
+    completionBlock (self, r);
+
+    [r release];
 }
 
 - (id) runSynchronouslyWithError: (NSError**) error
 {
-    return result;
+    if (error != NULL)
+        *error = nil;
+    return [[self retainedResult] autorelease];
 }
 
 - (void) cancel
 {
-    // FIXME: This should work.  Set a cancel flag and if the task runs propagate the cancel.
-    NSAssert (NO, @"Cannot cancel a value task");
+    @synchronized (self) {
+        [result release];
+        result = nil;
+    }
 }
 
 @end

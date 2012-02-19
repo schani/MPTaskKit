@@ -11,7 +11,7 @@
 #import "MPTask.h"
 
 @interface MPValueTask : NSObject <MPTask> {
-    id result;
+    volatile id result;  // nil if cancelled
 }
 
 + (MPValueTask*) valueTaskWithResult: (id) result;
