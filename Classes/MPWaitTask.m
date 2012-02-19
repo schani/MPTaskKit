@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#import "MPSynchronousTask.h"
+
 #import "MPWaitTask.h"
 
 @implementation MPWaitTask
@@ -55,17 +57,19 @@
 
     [condition lock];
 
-    NSAssert (result == nil && error == nil, @"Complete twice or complete after fail");
+    if (!cancelled) {
+        NSAssert (result == nil && error == nil, @"Complete twice or complete after fail");
 
-    if ([self haveBlocks]) {
-        // FIXME: unlock or try/finally
-        if (completionBlock != nil)
-            completionBlock (self, _result);
-        [self releaseBlocks];
-    } else {
-        result = [_result retain];
-        if (waiting)
-            [condition signal];
+        if ([self haveBlocks]) {
+            // FIXME: unlock or try/finally
+            if (completionBlock != nil)
+                completionBlock (self, _result);
+            [self releaseBlocks];
+        } else {
+            result = [_result retain];
+            if (waiting)
+                [condition signal];
+        }
     }
 
     [condition unlock];
@@ -77,17 +81,19 @@
 
     [condition lock];
 
-    NSAssert (result == nil && error == nil, @"Fail twice or fail after complete");
+    if (!cancelled) {
+        NSAssert (result == nil && error == nil, @"Fail twice or fail after complete");
 
-    if ([self haveBlocks]) {
-        // FIXME: unlock or try/finally
-        if (failureBlock != nil)
-            failureBlock (self, _error);
-        [self releaseBlocks];
-    } else {
-        error = [_error retain];
-        if (waiting)
-            [condition signal];
+        if ([self haveBlocks]) {
+            // FIXME: unlock or try/finally
+            if (failureBlock != nil)
+                failureBlock (self, _error);
+            [self releaseBlocks];
+        } else {
+            error = [_error retain];
+            if (waiting)
+                [condition signal];
+        }
     }
 
     [condition unlock];
@@ -95,22 +101,34 @@
 
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
+    id r;
+
+    [MPSynchronousTask doCancelIfRequested];
+
     [condition lock];
 
-    NSAssert (!waiting, @"Must not wait twice");
-    NSAssert (completionBlock == nil && failureBlock == nil, @"Must not run asynchronously and synchronously");
-    waiting = YES;
+    @try {
+        NSAssert (!waiting, @"Must not wait twice");
+        NSAssert (completionBlock == nil && failureBlock == nil, @"Must not run asynchronously and synchronously");
+        waiting = YES;
 
-    while (result == nil && error == nil)
-        [condition wait];
+        while (result == nil && error == nil && !cancelled)
+            [condition wait];
 
-    [condition unlock];
+        if (cancelled)
+            NSAssert (result == nil && error == nil, @"Cannot have error or result if cancelled");
 
-    if (_error != NULL)
-        *_error = error;
-    if (result != nil)
-        return result;
-    return nil;
+        if (_error != NULL)
+            *_error = [[error retain] autorelease];
+        r = [[result retain] autorelease];
+    }
+    @finally {
+        [condition unlock];
+    }
+
+    [MPSynchronousTask doCancelIfRequested];
+
+    return r;
 }
 
 - (void) runAsynchronouslyWithCompletionBlock: (void (^)(NSObject<MPTask> *, id)) _completionBlock
@@ -120,29 +138,44 @@
 
     [condition lock];
 
-    NSAssert (!waiting, @"Must not run synchronously and asynchronously");
-    NSAssert (completionBlock == nil && failureBlock == nil, @"Must not run twice");
+    @try {
+        NSAssert (!waiting, @"Must not run synchronously and asynchronously");
+        NSAssert (completionBlock == nil && failureBlock == nil, @"Must not run twice");
 
-    // FIXME: run the blocks without the lock or add a try/finally
-    if (result != nil) {
-        if (_completionBlock != nil)
-            _completionBlock (self, result);
-    } else if (error != nil) {
-        if (_failureBlock != nil)
-            _failureBlock (self, error);
-    } else {
-        completionBlock = [_completionBlock copy];
-        failureBlock = [_failureBlock copy];
-        // FIXME: save the thread and always invoke on that one
+        if (result != nil) {
+            if (_completionBlock != nil)
+                _completionBlock (self, result);
+        } else if (error != nil) {
+            if (_failureBlock != nil)
+                _failureBlock (self, error);
+        } else if (!cancelled) {
+            completionBlock = [_completionBlock copy];
+            failureBlock = [_failureBlock copy];
+            // FIXME: save the thread and always invoke on that one
+        }
     }
-
-    [condition unlock];
+    @finally {
+        [condition unlock];
+    }
 }
 
 - (void) cancel
 {
-    // FIXME: implement
-    NSAssert (NO, @"Cannot cancel a wait task");
+    [condition lock];
+
+    if (!cancelled) {
+        cancelled = YES;
+
+        [result release];
+        result = nil;
+
+        [error release];
+        error = nil;
+
+        [condition signal];
+    }
+
+    [condition unlock];
 }
 
 @end

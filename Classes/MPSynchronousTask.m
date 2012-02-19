@@ -133,6 +133,9 @@ SetCurrentTask (MPSynchronousTask *task)
 
 + (void) doCancelIfRequested
 {
+    if (GetCurrentTask () == nil)
+        return;
+
     MPSynchronousTask *task = [self cancelRequested];
     if (task == nil)
         return;

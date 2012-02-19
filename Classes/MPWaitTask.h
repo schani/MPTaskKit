@@ -13,6 +13,7 @@
 @interface MPWaitTask : NSObject <MPTask> {
     NSCondition *condition;
     volatile BOOL waiting;
+    volatile BOOL cancelled;
 
     void (^completionBlock) (NSObject <MPTask>*, id);
     void (^failureBlock) (NSObject <MPTask>*, NSError*);
