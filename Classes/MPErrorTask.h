@@ -11,7 +11,7 @@
 #import "MPTask.h"
 
 @interface MPErrorTask : NSObject <MPTask> {
-    NSError *error;
+    volatile NSError *error; // nil if cancelled
 }
 
 + (MPErrorTask*) errorTaskWithError: (NSError*) error;

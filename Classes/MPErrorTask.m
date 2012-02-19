@@ -8,6 +8,10 @@
 
 #import "MPErrorTask.h"
 
+@interface MPErrorTask ()
+- (NSError*) retainedError NS_RETURNS_RETAINED;
+@end
+
 @implementation MPErrorTask
 
 - (id) initWithError: (NSError*) _error
@@ -33,24 +37,52 @@
     return [[[MPErrorTask alloc] initWithError: error] autorelease];
 }
 
+- (NSError*) retainedError
+{
+    NSError *e;
+
+    @synchronized (self) {
+        e = (NSError*)[error retain];
+    }
+
+    return e;
+}
+
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
+    NSError *e = [self retainedError];
+
+    if (e == nil)
+        return nil;
+
     // FIXME: propagate if we can't return the error
     if (_error != NULL)
-        *_error = error;
+        *_error = e;
+
+    [e autorelease];
+
     return nil;
 }
 
 - (void) runAsynchronouslyWithCompletionBlock: (void (^)(NSObject<MPTask> *, id)) completionBlock
                                  failureBlock: (void (^)(NSObject<MPTask> *, NSError *)) failureBlock
 {
-    failureBlock (self, error);
+    NSError *e = [self retainedError];
+
+    if (e == nil)
+        return;
+
+    failureBlock (self, e);
+
+    [e release];
 }
 
 - (void) cancel
 {
-    // FIXME: implement
-    NSAssert (NO, @"Cannot cancel an error task");
+    @synchronized (self) {
+        [error release];
+        error = nil;
+    }
 }
 
 @end
