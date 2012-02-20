@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#import "MPSynchronousTask.h"
+
 #import "MPValueTask.h"
 
 @interface MPValueTask ()
@@ -64,6 +66,8 @@
 
 - (id) runSynchronouslyWithError: (NSError**) error
 {
+    [MPSynchronousTask doCancelIfRequested];
+
     if (error != NULL)
         *error = nil;
     return [[self retainedResult] autorelease];

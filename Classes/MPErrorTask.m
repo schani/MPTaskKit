@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#import "MPSynchronousTask.h"
+
 #import "MPErrorTask.h"
 
 @interface MPErrorTask ()
@@ -50,6 +52,8 @@
 
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
+    [MPSynchronousTask doCancelIfRequested];
+
     NSError *e = [self retainedError];
 
     if (e == nil)

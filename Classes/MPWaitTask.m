@@ -112,8 +112,10 @@
         NSAssert (completionBlock == nil && failureBlock == nil, @"Must not run asynchronously and synchronously");
         waiting = YES;
 
-        while (result == nil && error == nil && !cancelled)
+        while (result == nil && error == nil && !cancelled) {
             [condition wait];
+            [MPSynchronousTask doCancelIfRequested];
+        }
 
         if (cancelled)
             NSAssert (result == nil && error == nil, @"Cannot have error or result if cancelled");
@@ -125,8 +127,6 @@
     @finally {
         [condition unlock];
     }
-
-    [MPSynchronousTask doCancelIfRequested];
 
     return r;
 }
