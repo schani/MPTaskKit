@@ -13,7 +13,7 @@
 @interface MPSynchronousTask : NSObject <MPTask> {
 @private
     id (^block) (void);
-    MPSynchronousTask *parent;
+    MPSynchronousTask *child;
     BOOL cancelRequested;
 
     id asyncResult;
@@ -27,7 +27,6 @@
 + (MPSynchronousTask*) synchronousTaskWithBlock: (id (^) (void)) block;
 
 + (MPSynchronousTask*) currentTask;
-- (MPSynchronousTask*) parentTask;
 
 - (void) failWithError: (NSError*) error __attribute__ ((analyzer_noreturn));
 + (void) propagateError: (NSError*) error

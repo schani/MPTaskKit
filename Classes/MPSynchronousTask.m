@@ -16,26 +16,26 @@
 #pragma mark - TLS management
 
 static pthread_once_t onceControl = PTHREAD_ONCE_INIT;
-static pthread_key_t currentTaskKey;
+static pthread_key_t rootTaskKey;
 
 static void
-InitCurrentTaskKey (void)
+InitRootTaskKey (void)
 {
-    pthread_key_create (&currentTaskKey, NULL);
+    pthread_key_create (&rootTaskKey, NULL);
 }
 
 static MPSynchronousTask*
-GetCurrentTask (void)
+GetRootTask (void)
 {
-    pthread_once (&onceControl, InitCurrentTaskKey);
-    return pthread_getspecific (currentTaskKey);
+    pthread_once (&onceControl, InitRootTaskKey);
+    return pthread_getspecific (rootTaskKey);
 }
 
 static void
-SetCurrentTask (MPSynchronousTask *task)
+SetRootTask (MPSynchronousTask *task)
 {
-    pthread_once (&onceControl, InitCurrentTaskKey);
-    pthread_setspecific (currentTaskKey, task);
+    pthread_once (&onceControl, InitRootTaskKey);
+    pthread_setspecific (rootTaskKey, task);
 }
 
 @implementation MPSynchronousTask
@@ -81,26 +81,40 @@ SetCurrentTask (MPSynchronousTask *task)
 
 + (MPSynchronousTask*) currentTask
 {
-    return GetCurrentTask ();
-}
-
-- (MPSynchronousTask*) parentTask
-{
-    return parent;
+    MPSynchronousTask *task = GetRootTask ();
+    if (task == nil)
+        return nil;
+    while (task->child != nil)
+        task = task->child;
+    return task;
 }
 
 - (void) pushCurrentTask
 {
-    NSAssert (parent == nil, @"Are we already running?");
-    parent = GetCurrentTask ();
-    SetCurrentTask (self);
+    NSAssert (child == nil, @"Are we already running?");
+
+    MPSynchronousTask *parent = [MPSynchronousTask currentTask];
+    if (parent == nil)
+        SetRootTask (self);
+    else
+        parent->child = self;
 }
 
 - (void) popCurrentTask
 {
-    NSAssert (GetCurrentTask () == self, @"Can only pop if we are top");
-    SetCurrentTask (parent);
-    parent = nil;
+    NSAssert (child == nil, @"Can only pop if we don't have child");
+
+    MPSynchronousTask *task = GetRootTask ();
+
+    if (task == self) {
+        SetRootTask (nil);
+        return;
+    }
+
+    while (task->child != nil && task->child != self)
+        task = task->child;
+    NSAssert (task->child == self, @"Can only pop if we're in the list");
+    task->child = nil;
 }
 
 + (BOOL) isTaskInCurrentChain: (NSObject <MPTask>*) task
@@ -108,11 +122,11 @@ SetCurrentTask (MPSynchronousTask *task)
     if (![task isKindOfClass: [MPSynchronousTask class]])
         return NO;
 
-    MPSynchronousTask *chainTask = GetCurrentTask ();
+    MPSynchronousTask *chainTask = GetRootTask ();
     while (chainTask != nil) {
         if (chainTask == task)
             return YES;
-        chainTask = [chainTask parentTask];
+        chainTask = chainTask->child;
     }
     return NO;
 }
@@ -121,19 +135,20 @@ SetCurrentTask (MPSynchronousTask *task)
 
 + (MPSynchronousTask*) cancelRequested
 {
-    MPSynchronousTask *task = GetCurrentTask ();
+    MPSynchronousTask *task = GetRootTask ();
     NSAssert (task != nil, @"Can only check cancel if there's a task");
+    MPSynchronousTask *topCancelled = nil;
     while (task != nil) {
         if (task->cancelRequested)
-            return task;
-        task = [task parentTask];
+            topCancelled = task;
+        task = task->child;
     }
-    return nil;
+    return topCancelled;
 }
 
 + (void) doCancelIfRequested
 {
-    if (GetCurrentTask () == nil)
+    if (GetRootTask () == nil)
         return;
 
     MPSynchronousTask *task = [self cancelRequested];
@@ -262,7 +277,7 @@ SetCurrentTask (MPSynchronousTask *task)
                 // report it here
                 *error = [exception error];
                 return nil;
-            } else if (parent == nil && error == NULL) {
+            } else if (GetRootTask () == self && error == NULL) {
                 // nowhere to pass it to - ignore
                 return nil;
             }
@@ -281,7 +296,7 @@ SetCurrentTask (MPSynchronousTask *task)
         }
     }
     @catch (NSException *exception) {
-        if (parent != nil) {
+        if (GetRootTask () != self) {
             // we're not the othermost task, so just propagate
             @throw exception;
         }
