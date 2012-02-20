@@ -80,10 +80,12 @@ completionProcessor: (id (^) (MPDataProcessorTask*, id)) _completionProcessor
                                         data = [self processData: data];
 
                                         if (data != nil) {
-                                            completionBlock (self, data);
+                                            if (completionBlock != nil)
+                                                completionBlock (self, data);
                                         } else {
                                             // FIXME: pass a suitable NSError
-                                            failureBlock (self, nil);
+                                            if (failureBlock != nil)
+                                                failureBlock (self, nil);
                                         }
 
                                         [self releaseAll];
