@@ -63,12 +63,9 @@
         return nil;
     }
 
-    // FIXME: propagate if we can't return the error
-    if (_error != NULL)
-        *_error = e;
-
-    [e autorelease];
-
+    [MPSynchronousTask setErrorPointer: _error
+                      orPropagateError: [e autorelease]
+                              fromTask: self];
     return nil;
 }
 

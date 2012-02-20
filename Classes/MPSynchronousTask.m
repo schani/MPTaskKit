@@ -158,6 +158,23 @@ SetCurrentTask (MPSynchronousTask *task)
     @throw [MPTaskException taskExceptionForTask: task error: error];
 }
 
++ (void) setErrorPointer: (NSError**) errorPointer
+        orPropagateError: (NSError*) error
+                fromTask: (NSObject <MPTask>*) task
+{
+    NSAssert (error, @"Cannot fail without error");
+
+    if (errorPointer != NULL) {
+        *errorPointer = error;
+        return;
+    }
+
+    if ([self currentTask] == nil)
+        return;
+
+    [self propagateError: error fromTask: task];
+}
+
 #pragma mark - Running asynchronously
 
 - (void) callbackCompletion: (id) dummy

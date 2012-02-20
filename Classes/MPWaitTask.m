@@ -120,8 +120,17 @@
         if (cancelled)
             NSAssert (result == nil && error == nil, @"Cannot have error or result if cancelled");
 
+        if (error != nil) {
+            // we do this so the error doesn't get dealloced because of a release in -cancel
+            [[error retain] autorelease];
+            [MPSynchronousTask setErrorPointer: _error
+                              orPropagateError: error
+                                      fromTask: self];
+            return nil;
+        }
+
         if (_error != NULL)
-            *_error = [[error retain] autorelease];
+            *_error = nil;
         r = [[result retain] autorelease];
     }
     @finally {

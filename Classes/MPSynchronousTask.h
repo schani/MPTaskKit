@@ -31,7 +31,10 @@
 
 - (void) failWithError: (NSError*) error __attribute__ ((analyzer_noreturn));
 + (void) propagateError: (NSError*) error
-               fromTask: (NSObject <MPTask>*) task;
+               fromTask: (NSObject <MPTask>*) task __attribute__ ((analyzer_noreturn));
++ (void) setErrorPointer: (NSError**) errorPointer
+        orPropagateError: (NSError*) error
+                fromTask: (NSObject <MPTask>*) task;
 
 + (MPSynchronousTask*) cancelRequested;
 + (void) doCancelIfRequested;

@@ -148,32 +148,23 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
         NSError *runLoopError = [NSError errorWithDomain: MPTaskErrorDomain
                                                     code: MPTaskCouldNotStartRunLoopErrorCode
                                                 userInfo: nil];
-        if (_error != NULL) {
-            *_error = runLoopError;
-            return nil;
-        }
-        if (!inSynchronousTask)
-            return nil;
-        [MPSynchronousTask propagateError: runLoopError fromTask: self];
-        NSAssert (NO, @"This must never run");
+        [MPSynchronousTask setErrorPointer: _error
+                          orPropagateError: runLoopError
+                                  fromTask: self];
+        return nil;
     }
 
-    if (_error != NULL) {
-        *_error = [[error retain] autorelease];
-    } else if (error != nil && inSynchronousTask) {
+    if (error != nil) {
         NSError *theError = [error autorelease];
         error = nil;
 
-        [MPSynchronousTask propagateError: theError fromTask: self];
-        NSAssert (NO, @"This must never run");
+        [MPSynchronousTask setErrorPointer: _error
+                          orPropagateError: theError
+                                  fromTask: self];
+        return nil;
     }
 
-    NSDictionary *result = error != nil ? nil : [self resultDictionary];
-
-    [error release];
-    error = nil;
-
-    return result;
+    return [self resultDictionary];
 }
 
 - (void) cancel

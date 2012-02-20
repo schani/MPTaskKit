@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#import "MPSynchronousTask.h"
+
 #import "MPDataProcessorTask.h"
 
 @implementation MPDataProcessorTask
@@ -105,12 +107,22 @@ completionProcessor: (id (^) (MPDataProcessorTask*, id)) _completionProcessor
     NSError *error = nil;
     id data = [task runSynchronouslyWithError: &error];
 
-    if (data == nil || error != nil) {
+    if (error != nil) {
         error = [self processError: error];
-        if (_error != nil)
-            *_error = error;
         [self releaseAll];
-        return data;
+        [MPSynchronousTask setErrorPointer: _error
+                          orPropagateError: error
+                                  fromTask: self];
+        return nil;
+    }
+
+    if (_error != NULL)
+        *_error = nil;
+
+    if (data == nil) {
+        // task was cancelled
+        [self releaseAll];
+        return nil;
     }
 
     data = [self processData: data];
