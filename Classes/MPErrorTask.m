@@ -56,8 +56,12 @@
 
     NSError *e = [self retainedError];
 
-    if (e == nil)
+    if (e == nil) {
+        // cancelled
+        if (_error != NULL)
+            *_error = nil;
         return nil;
+    }
 
     // FIXME: propagate if we can't return the error
     if (_error != NULL)

@@ -282,6 +282,8 @@ SetCurrentTask (MPSynchronousTask *task)
     @finally {
         [self popCurrentTask];
     }
+    if (error != NULL)
+        *error = nil;
     return result;
 }
 
