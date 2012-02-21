@@ -184,6 +184,9 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
                           orPropagateError: theError
                                   fromTask: self];
         return nil;
+    } else {
+        if (_error != NULL)
+            *_error = nil;
     }
 
     return [self resultDictionary];
