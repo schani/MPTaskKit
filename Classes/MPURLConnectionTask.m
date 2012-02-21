@@ -123,23 +123,45 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
     [self startConnection];
 }
 
+- (void) checkSynchronousTaskCancel
+{
+    if ([MPSynchronousTask currentTask] != nil && [MPSynchronousTask cancelRequested]) {
+        @synchronized (self) {
+            synchronousThread = nil;
+        }
+        [self cancel];
+        [[MPSynchronousTask currentTask] popLeafTask: self];
+        [MPSynchronousTask doCancelIfRequested];
+        NSAssert (NO, @"This must never run");
+    }
+}
+
 - (id) runSynchronouslyWithError: (NSError**) _error
 {
     BOOL inSynchronousTask = [MPSynchronousTask currentTask] != nil;
     NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
 
+    if (inSynchronousTask)
+        [[MPSynchronousTask currentTask] pushLeafTask: self];
+
     [self startConnection];
+    @synchronized (self) {
+        synchronousThread = [NSThread currentThread];
+    }
 
     do {
         if (![runLoop runMode: NSDefaultRunLoopMode beforeDate: [NSDate distantFuture]])
             break;
 
-        if (inSynchronousTask && [MPSynchronousTask cancelRequested]) {
-            [self cancel];
-            [MPSynchronousTask doCancelIfRequested];
-            NSAssert (NO, @"This must never run");
-        }
+        [self checkSynchronousTaskCancel];
     } while (connection != nil);
+
+    @synchronized (self) {
+        synchronousThread = nil;
+    }
+
+    if (inSynchronousTask)
+        [[MPSynchronousTask currentTask] popLeafTask: self];
 
     if (connection) {
         // something went wrong with the run loop
@@ -179,6 +201,20 @@ NSString *MPURLConnectionTaskResultStatusCodeKey = @"MPURLConnectionTaskResultSt
 
     [data release];
     data = nil;
+}
+
+#pragma mark - MPLeafTask
+
+- (void) cancelForParentTask
+{
+    @synchronized (self) {
+        if (synchronousThread != nil) {
+            [self performSelector: @selector (checkSynchronousTaskCancel)
+                         onThread: synchronousThread
+                       withObject: nil
+                    waitUntilDone: NO];
+        }
+    }
 }
 
 #pragma mark - NSURLConnection delegate

@@ -38,6 +38,24 @@ SetRootTask (MPSynchronousTask *task)
     pthread_setspecific (rootTaskKey, task);
 }
 
+#pragma mark - Synch object
+
+static pthread_once_t syncObjectOnceControl = PTHREAD_ONCE_INIT;
+static id syncObject;
+
+static void
+InitSynchObject (void)
+{
+    syncObject = [[NSNumber numberWithInt: 0] retain];
+}
+
+static id
+SyncObject (void)
+{
+    pthread_once (&syncObjectOnceControl, InitSynchObject);
+    return syncObject;
+}
+
 @implementation MPSynchronousTask
 
 #pragma mark - Init and dealloc
@@ -48,6 +66,7 @@ SetRootTask (MPSynchronousTask *task)
     if (self != nil) {
         block = [_block copy];
         cancelRequested = NO;
+        leafTasks = [[NSMutableArray arrayWithCapacity: 1] retain];
     }
     return self;
 }
@@ -55,6 +74,7 @@ SetRootTask (MPSynchronousTask *task)
 - (void) dealloc
 {
     [block release];
+    [leafTasks release];
 
     [super dealloc];
 }
@@ -241,6 +261,43 @@ SetRootTask (MPSynchronousTask *task)
     [self cleanupAsync];
 }
 
+#pragma mark - Leaf tasks
+
+- (void) pushLeafTask: (NSObject <MPLeafTask>*) leafTask
+{
+    NSAssert ([MPSynchronousTask currentTask] == self, @"Can only push to current task");
+
+    @synchronized (SyncObject ()) {
+        [leafTasks addObject: leafTask];
+    }
+}
+
+- (void) popLeafTask: (NSObject <MPLeafTask>*) leafTask
+{
+    NSAssert ([MPSynchronousTask currentTask] == self, @"Can only pop from current task");
+
+    @synchronized (SyncObject ()) {
+        NSObject <MPLeafTask> *task = [leafTasks lastObject];
+        NSAssert (task == leafTask, @"Must pop in correct order");
+        [leafTasks removeLastObject];
+    }
+
+    [MPSynchronousTask doCancelIfRequested];
+}
+
+- (void) notifyLeafTaskOfCancel
+{
+    @synchronized (SyncObject ()) {
+        MPSynchronousTask *task = self;
+        while (task->child != nil)
+            task = task->child;
+
+        NSObject <MPLeafTask> *leafTask = [task->leafTasks lastObject];
+        if (leafTask != nil)
+            [leafTask cancelForParentTask];
+    }
+}
+
 #pragma mark - MPTask
 
 - (void) runAsynchronouslyWithCompletionBlock: (void (^) (NSObject <MPTask>*, id)) completionBlock
@@ -322,6 +379,7 @@ SetRootTask (MPSynchronousTask *task)
 - (void) cancel
 {
     cancelRequested = YES;
+    [self notifyLeafTaskOfCancel];
 }
 
 @end

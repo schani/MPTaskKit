@@ -106,6 +106,7 @@
     [MPSynchronousTask doCancelIfRequested];
 
     [condition lock];
+    [[MPSynchronousTask currentTask] pushLeafTask: self];
 
     @try {
         NSAssert (!waiting, @"Must not wait twice");
@@ -134,6 +135,7 @@
         r = [[result retain] autorelease];
     }
     @finally {
+        [[MPSynchronousTask currentTask] popLeafTask: self];
         [condition unlock];
     }
 
@@ -184,6 +186,13 @@
         [condition signal];
     }
 
+    [condition unlock];
+}
+
+- (void) cancelForParentTask
+{
+    [condition lock];
+    [condition signal];
     [condition unlock];
 }
 

@@ -9,8 +9,9 @@
 #import <Foundation/Foundation.h>
 
 #import "MPTask.h"
+#import "MPLeafTask.h"
 
-@interface MPWaitTask : NSObject <MPTask> {
+@interface MPWaitTask : NSObject <MPTask, MPLeafTask> {
     NSCondition *condition;
     volatile BOOL waiting;
     volatile BOOL cancelled;

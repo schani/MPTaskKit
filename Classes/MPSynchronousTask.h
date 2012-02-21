@@ -9,12 +9,14 @@
 #import <Foundation/Foundation.h>
 
 #import "MPTask.h"
+#import "MPLeafTask.h"
 
 @interface MPSynchronousTask : NSObject <MPTask> {
 @private
     id (^block) (void);
     MPSynchronousTask *child;
-    BOOL cancelRequested;
+    volatile BOOL cancelRequested;
+    NSMutableArray *leafTasks;
 
     id asyncResult;
     NSError *asyncError;
@@ -37,5 +39,8 @@
 
 + (MPSynchronousTask*) cancelRequested;
 + (void) doCancelIfRequested;
+
+- (void) pushLeafTask: (NSObject <MPLeafTask>*) leafTask;
+- (void) popLeafTask: (NSObject <MPLeafTask>*) leafTask;
 
 @end

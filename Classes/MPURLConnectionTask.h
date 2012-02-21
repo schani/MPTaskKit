@@ -9,8 +9,9 @@
 #import <Foundation/Foundation.h>
 
 #import "MPTask.h"
+#import "MPLeafTask.h"
 
-@interface MPURLConnectionTask : NSObject <MPTask> {
+@interface MPURLConnectionTask : NSObject <MPTask, MPLeafTask> {
 @private
 	NSURLConnection *connection;
     BOOL failOnHTTPError;
@@ -19,6 +20,8 @@
 	int statusCode;
     
     NSError *error;
+
+    NSThread *synchronousThread;
 
 	void (^completionBlock) (NSObject <MPTask>*, id);
 	void (^failureBlock) (NSObject <MPTask>*, NSError*);
