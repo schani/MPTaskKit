@@ -8,7 +8,7 @@
 
 #import "MPBackgroundTaskHandler.h"
 #import "MPSynchronousTask.h"
-#import "UIApplication+LentiCam.h"
+#import "UIApplication+NetworkActivity.h"
 
 #import "MPURLConnectionTask.h"
 
